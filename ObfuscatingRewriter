@@ -1,0 +1,125 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Obfuscator
+{
+    class ObfuscatingRewriter : CSharpSyntaxRewriter
+    {
+        private readonly Dictionary<string, string> _renamedIdentifiers = new Dictionary<string, string>();
+        private readonly Random _random = new Random();
+        private readonly Aes _aes;
+
+        public ObfuscatingRewriter()
+        {
+            _aes = Aes.Create();
+            _aes.GenerateKey();
+            _aes.GenerateIV();
+        }
+
+        public override SyntaxNode VisitVariableDeclarator(VariableDeclaratorSyntax node)
+        {
+            string originalName = node.Identifier.Text;
+            if (!_renamedIdentifiers.ContainsKey(originalName))
+            {
+                string newName = GenerateRandomString();
+                _renamedIdentifiers[originalName] = newName;
+            }
+
+            return node.WithIdentifier(SyntaxFactory.Identifier(_renamedIdentifiers[originalName]));
+        }
+
+        public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
+        {
+            string originalName = node.Identifier.Text;
+            if (!_renamedIdentifiers.ContainsKey(originalName))
+            {
+                string newName = GenerateRandomString();
+                _renamedIdentifiers[originalName] = newName;
+            }
+
+            return node.WithIdentifier(SyntaxFactory.Identifier(_renamedIdentifiers[originalName]));
+        }
+
+        public override SyntaxNode VisitClassDeclaration(ClassDeclarationSyntax node)
+        {
+            string originalName = node.Identifier.Text;
+            if (!_renamedIdentifiers.ContainsKey(originalName))
+            {
+                string newName = GenerateRandomString();
+                _renamedIdentifiers[originalName] = newName;
+            }
+
+            return node.WithIdentifier(SyntaxFactory.Identifier(_renamedIdentifiers[originalName]));
+        }
+
+        public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+        {
+            string originalName = node.Identifier.Text;
+            if (!_renamedIdentifiers.ContainsKey(originalName))
+            {
+                string newName = GenerateRandomString();
+                _renamedIdentifiers[originalName] = newName;
+            }
+
+            return node.WithIdentifier(SyntaxFactory.Identifier(_renamedIdentifiers[originalName]));
+        }
+
+        public override SyntaxNode VisitLiteralExpression(LiteralExpressionSyntax node)
+        {
+            if (node.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                string originalValue = node.Token.ValueText;
+                string encryptedValue = EncryptString(originalValue);
+                return SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression,
+                    SyntaxFactory.Literal(encryptedValue));
+            }
+
+            return base.VisitLiteralExpression(node);
+        }
+
+        public override SyntaxNode VisitIfStatement(IfStatementSyntax node)
+        {
+            // Example control flow obfuscation: add a dummy if statement
+            var dummyCondition = SyntaxFactory.ParseExpression("false");
+            var dummyIfStatement = SyntaxFactory.IfStatement(dummyCondition, SyntaxFactory.Block());
+
+            var newStatement = node.WithElse(SyntaxFactory.ElseClause(dummyIfStatement));
+            return base.VisitIfStatement(newStatement);
+        }
+
+        private string GenerateRandomString()
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+            int length = _random.Next(8, 16);
+            char[] stringChars = new char[length];
+
+            for (int i = 0; i < stringChars.Length; i++)
+            {
+                stringChars[i] = chars[_random.Next(chars.Length)];
+            }
+
+            return new string(stringChars);
+        }
+
+        private string EncryptString(string plainText)
+        {
+            ICryptoTransform encryptor = _aes.CreateEncryptor(_aes.Key, _aes.IV);
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (CryptoStream cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
+                {
+                    using (StreamWriter sw = new StreamWriter(cs))
+                    {
+                        sw.Write(plainText);
+                    }
+                }
+                return Convert.ToBase64String(ms.ToArray());
+            }
+        }
+    }
+}
